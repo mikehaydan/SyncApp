@@ -155,6 +155,34 @@ struct SyncManagerTests {
         #expect(store.cursor == 9)
     }
 
+    @Test("Testing sync pull with an undecodable operation. It is skipped and the rest is saved")
+    func syncPullSkipsUndecodableOperation() async throws {
+        // Given
+        let remote = FileOperation.dummy(deviceID: "device-b", serverSeq: 9)
+        let broken = OperationDTO(
+            id: UUID(),
+            fileID: UUID(),
+            deviceID: "device-b",
+            timestamp: Date(),
+            baseCursor: 0,
+            payload: Data("not json".utf8),
+            serverSeq: 8
+        )
+        api.pullToBeReturned = PullResponse(operations: [broken, try OperationDTO(remote)], cursor: 9)
+
+        // When
+        try await sut.sync()
+
+        // Then
+        var saved: [FileOperation] = []
+        for batch in store.savedOperations {
+            saved.append(contentsOf: batch)
+        }
+        #expect(saved.count == 1)
+        #expect(saved.first?.id == remote.id)
+        #expect(store.cursor == 9)
+    }
+
     @Test("Testing sync pull. Current cursor and device id are sent")
     func syncPullUsesCursorAndDeviceID() async throws {
         // Given

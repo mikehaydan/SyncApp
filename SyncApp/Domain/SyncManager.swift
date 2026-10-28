@@ -111,7 +111,9 @@ final class SyncManager {
         let response = try await api.pull(since: store.cursor, excluding: deviceID)
         var remote: [FileOperation] = []
         for dto in response.operations {
-            remote.append(try FileOperation(dto, status: .synced))
+            if let operation = try? FileOperation(dto, status: .synced) {
+                remote.append(operation)
+            }
         }
         try store.save(remote)
         store.cursor = response.cursor
