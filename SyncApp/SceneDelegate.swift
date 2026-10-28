@@ -5,15 +5,33 @@
 //  Created by Mykhailo Haidan on 28/10/2026.
 //
 
+import CoreData
+import SwiftUI
 import UIKit
 
-class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     var window: UIWindow?
 
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
-        guard let scene = (scene as? UIWindowScene) else { return }
+        guard let windowScene = scene as? UIWindowScene else { return }
+
+        let persistence = PersistenceController()
+        let store = CoreDataOperationStore(context: persistence.container.viewContext)
+        let server = InMemorySyncServer()
+        let manager = SyncManager(
+            store: store,
+            api: server,
+            reducer: FileReducer(),
+            deviceID: DeviceID.current
+        )
+        let viewModel = FilesViewModel(manager: manager, remote: MockRemoteDevice(server: server))
+
+        let window = UIWindow(windowScene: windowScene)
+        window.rootViewController = UIHostingController(rootView: FilesView(viewModel: viewModel))
+        window.makeKeyAndVisible()
+        self.window = window
     }
 
     func sceneDidDisconnect(_ scene: UIScene) {
@@ -43,7 +61,5 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // Use this method to save data, release shared resources, and store enough scene-specific state information
         // to restore the scene back to its current state.
     }
-
-
 }
 
