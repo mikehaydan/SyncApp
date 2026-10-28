@@ -270,6 +270,20 @@ struct FileReducerTests {
         #expect(files.first?.tags == [tag])
     }
 
+    @Test("Testing delete made after seeing the tag. File is deleted for good")
+    func deleteAfterSeeingTag() async throws {
+        // Given
+        let tag = SyncApp.Tag(id: UUID(), text: "remote")
+        let add = makeAddTag(tag, offset: 2, deviceID: "device-b", baseCursor: 1, serverSeq: 2)
+        let secondDelete = makeDelete(deviceID: "device-a", serverSeq: 4, baseCursor: 3, offset: 3)
+
+        // When
+        let files = sut.reduce([makeCreate(), add, secondDelete])
+
+        // Then
+        #expect(files.isEmpty)
+    }
+
     @Test("Testing several files. Each is built from its own operations")
     func severalFiles() async throws {
         // Given
@@ -311,21 +325,29 @@ struct FileReducerTests {
         FileOperation.dummy(fileID: fileID, timestamp: now, kind: .create(name: "File", folderID: folderID))
     }
 
-    private func makeAddTag(_ tag: SyncApp.Tag, offset: TimeInterval, deviceID: String = "device-a", baseCursor: Int = 0) -> FileOperation {
+    private func makeAddTag(
+        _ tag: SyncApp.Tag,
+        offset: TimeInterval,
+        deviceID: String = "device-a",
+        baseCursor: Int = 0,
+        serverSeq: Int? = nil
+    ) -> FileOperation {
         FileOperation.dummy(
             fileID: fileID,
             deviceID: deviceID,
             timestamp: now.addingTimeInterval(offset),
             baseCursor: baseCursor,
-            kind: .addTag(tag)
+            kind: .addTag(tag),
+            serverSeq: serverSeq
         )
     }
 
-    private func makeDelete(deviceID: String, serverSeq: Int?) -> FileOperation {
+    private func makeDelete(deviceID: String, serverSeq: Int?, baseCursor: Int = 0, offset: TimeInterval = 1) -> FileOperation {
         FileOperation.dummy(
             fileID: fileID,
             deviceID: deviceID,
-            timestamp: now.addingTimeInterval(1),
+            timestamp: now.addingTimeInterval(offset),
+            baseCursor: baseCursor,
             kind: .delete,
             serverSeq: serverSeq
         )

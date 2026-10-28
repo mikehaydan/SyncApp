@@ -83,7 +83,11 @@ final class FileReducer {
             let deleteSeq = delete.serverSeq ?? Int.max
             var isRescued = false
             for add in tagAdds {
-                if add.deviceID != delete.deviceID && add.baseCursor < deleteSeq {
+                let addSeq = add.serverSeq ?? Int.max
+                let isFromAnotherDevice = add.deviceID != delete.deviceID
+                let addDidNotSeeDelete = add.baseCursor < deleteSeq
+                let deleteDidNotSeeAdd = delete.baseCursor < addSeq
+                if isFromAnotherDevice && addDidNotSeeDelete && deleteDidNotSeeAdd {
                     isRescued = true
                     break
                 }
