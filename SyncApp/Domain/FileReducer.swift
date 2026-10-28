@@ -26,8 +26,8 @@ final class FileReducer {
     }
 
     private func makeFile(from operations: [FileOperation]) -> FileItem? {
-        let ordered = operations.sorted(by: isOrderedBefore)
-        guard let fileID = ordered.first?.fileID else { return nil }
+        let ordered = operations.sorted { lhs, rhs in isOrderedBefore(lhs, rhs) }
+        guard let firstOperation = ordered.first else { return nil }
 
         var name: String?
         var folderID: UUID?
@@ -36,9 +36,12 @@ final class FileReducer {
         var acceptedTagAdds: [FileOperation] = []
         var deletes: [FileOperation] = []
 
-        for case let .create(createdName, createdFolderID) in ordered.map(\.kind) where name == nil {
-            name = createdName
-            folderID = createdFolderID
+        for operation in ordered {
+            if case .create(let createdName, let createdFolderID) = operation.kind {
+                name = createdName
+                folderID = createdFolderID
+                break
+            }
         }
 
         for operation in ordered {
@@ -52,33 +55,42 @@ final class FileReducer {
             case .delete:
                 deletes.append(operation)
             case .addTag(let tag):
-                guard tags.count < maxTags,
-                      !removedTagIDs.contains(tag.id),
-                      !tags.contains(where: { $0.id == tag.id }) else { continue }
+                let isLimitReached = tags.count >= maxTags
+                let wasRemoved = removedTagIDs.contains(tag.id)
+                let alreadyExists = tags.contains(where: { existingTag in existingTag.id == tag.id })
+                if isLimitReached || wasRemoved || alreadyExists {
+                    continue
+                }
                 tags.append(tag)
                 acceptedTagAdds.append(operation)
             case .removeTag(let tagID):
-                tags.removeAll { $0.id == tagID }
+                tags.removeAll(where: { tag in tag.id == tagID })
                 removedTagIDs.insert(tagID)
             case .editTag(let tagID, let text):
-                if let index = tags.firstIndex(where: { $0.id == tagID }) {
+                if let index = tags.firstIndex(where: { tag in tag.id == tagID }) {
                     tags[index].text = text
                 }
             }
         }
 
-        guard let name, let folderID else { return nil }
-        guard !isDeleted(deletes: deletes, tagAdds: acceptedTagAdds) else { return nil }
-        return FileItem(id: fileID, name: name, folderID: folderID, tags: tags)
+        guard let name = name, let folderID = folderID else { return nil }
+        if isDeleted(deletes: deletes, tagAdds: acceptedTagAdds) { return nil }
+        return FileItem(id: firstOperation.fileID, name: name, folderID: folderID, tags: tags)
     }
 
     private func isDeleted(deletes: [FileOperation], tagAdds: [FileOperation]) -> Bool {
-        deletes.contains { delete in
-            let deleteSeq = delete.serverSeq ?? .max
-            return !tagAdds.contains { add in
-                add.deviceID != delete.deviceID && add.baseCursor < deleteSeq
+        for delete in deletes {
+            let deleteSeq = delete.serverSeq ?? Int.max
+            var isRescued = false
+            for add in tagAdds {
+                if add.deviceID != delete.deviceID && add.baseCursor < deleteSeq {
+                    isRescued = true
+                    break
+                }
             }
+            if !isRescued { return true }
         }
+        return false
     }
 
     private func isOrderedBefore(_ lhs: FileOperation, _ rhs: FileOperation) -> Bool {
